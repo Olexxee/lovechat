@@ -1,0 +1,255 @@
+import { Platform } from "react-native";
+
+export const API_BASE_URL = (
+  process.env.EXPO_PUBLIC_API_URL ?? "http://127.0.0.1:8000/api"
+).replace(/\/$/, "");
+
+export type User = {
+  id: number;
+  name: string;
+  email: string;
+  avatar_url?: string | null;
+};
+
+export type RelationshipType = "ROMANTIC" | "FRIEND" | "FAMILY" | "OTHER";
+
+export type RelationshipPartner = {
+  id: number;
+  name: string;
+  avatar_url: string | null;
+};
+
+export type Relationship = {
+  id: number;
+  user_one_id: number;
+  user_two_id: number;
+  relationship_type: RelationshipType;
+  status: string;
+  created_at: string;
+  conversation_id: number;
+  partner: RelationshipPartner;
+};
+
+export type MessageAttachment = {
+  id: number;
+  media_asset_id: number;
+  secure_url: string;
+  format: string | null;
+  width: number | null;
+  height: number | null;
+};
+
+export type Message = {
+  id: number;
+  conversation_id: number;
+  sender_id: number;
+  client_message_id?: string | null;
+  content: string;
+  created_at: string;
+  read_at: string | null;
+  deleted_at: string | null;
+  attachments: MessageAttachment[];
+};
+
+export type MediaAsset = {
+  id: number;
+  public_id: string;
+  secure_url: string;
+  format: string | null;
+  width: number | null;
+  height: number | null;
+};
+
+type RegisterPayload = {
+  name: string;
+  email: string;
+  password: string;
+};
+
+type LoginPayload = {
+  email: string;
+  password: string;
+};
+
+type CreateRelationshipPayload = {
+  identifier: string;
+  relationship_type: RelationshipType;
+};
+
+const getErrorMessage = async (response: Response): Promise<string> => {
+  try {
+    const data = await response.json();
+
+    if (typeof data.detail === "string") {
+      return data.detail;
+    }
+
+    if (typeof data.message === "string") {
+      return data.message;
+    }
+
+    if (Array.isArray(data.detail)) {
+      return data.detail
+        .map((item: { msg?: string }) => item.msg ?? "")
+        .filter(Boolean)
+        .join(", ");
+    }
+  } catch {
+    // The server may return a non-JSON error response.
+  }
+
+  return `Request failed with status ${response.status}.`;
+};
+
+const request = async <T>(
+  path: string,
+  options: RequestInit = {},
+): Promise<T> => {
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    ...options,
+    credentials: "include",
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(await getErrorMessage(response));
+  }
+
+  return response.json() as Promise<T>;
+};
+
+/**
+ * Upload a picked image using multipart/form-data.
+ * Do not manually set Content-Type; fetch supplies the multipart boundary.
+ */
+const uploadImageFile = async (
+  path: string,
+  uri: string,
+  filename: string,
+  mimeType: string,
+): Promise<MediaAsset> => {
+  const formData = new FormData();
+
+  if (Platform.OS === "web") {
+    const blobResponse = await fetch(uri);
+
+    if (!blobResponse.ok) {
+      throw new Error("Could not read the selected image.");
+    }
+
+    const blob = await blobResponse.blob();
+    formData.append("file", blob, filename);
+  } else {
+    formData.append("file", {
+      uri,
+      name: filename,
+      type: mimeType,
+    } as any);
+  }
+
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    method: "POST",
+    credentials: "include",
+    body: formData,
+  });
+
+  if (!response.ok) {
+    throw new Error(await getErrorMessage(response));
+  }
+
+  return (await response.json()) as MediaAsset;
+};
+
+/* -------------------------------------------------------------------------- */
+/* Auth                                                                       */
+/* -------------------------------------------------------------------------- */
+
+export const registerUser = (payload: RegisterPayload): Promise<User> =>
+  request<User>("/auth/register", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+
+export const loginUser = (payload: LoginPayload): Promise<User> =>
+  request<User>("/auth/login", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+
+export const getCurrentUser = (): Promise<User> => request<User>("/auth/me");
+
+export const logoutUser = async (): Promise<void> => {
+  await request<unknown>("/auth/logout", {
+    method: "POST",
+  });
+};
+
+/* -------------------------------------------------------------------------- */
+/* Relationships                                                              */
+/* -------------------------------------------------------------------------- */
+
+export const getRelationships = (): Promise<Relationship[]> =>
+  request<Relationship[]>("/relationships");
+
+export const createRelationship = (
+  payload: CreateRelationshipPayload,
+): Promise<Relationship> =>
+  request<Relationship>("/relationships", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+
+/* -------------------------------------------------------------------------- */
+/* Messages                                                                   */
+/* -------------------------------------------------------------------------- */
+
+export const getMessages = (conversationId: number): Promise<Message[]> =>
+  request<Message[]>(`/conversations/${conversationId}/messages`);
+
+export const markMessageAsRead = (messageId: number): Promise<Message> =>
+  request<Message>(`/messages/${messageId}/read`, {
+    method: "PATCH",
+  });
+
+export async function sendMessage(
+  conversationId: number,
+  content: string,
+  attachmentIds: number[] = [],
+  clientMessageId?: string,
+): Promise<Message> {
+  return request<Message>(`/conversations/${conversationId}/messages`, {
+    method: "POST",
+    body: JSON.stringify({
+      content,
+      attachment_ids: attachmentIds,
+      ...(clientMessageId ? { client_message_id: clientMessageId } : {}),
+    }),
+  });
+}
+
+/* -------------------------------------------------------------------------- */
+/* Media                                                                      */
+/* -------------------------------------------------------------------------- */
+
+export const uploadAvatar = (
+  uri: string,
+  filename: string,
+  mimeType: string,
+): Promise<MediaAsset> =>
+  uploadImageFile("/media/avatar", uri, filename, mimeType);
+
+export const uploadChatAttachment = (
+  conversationId: number,
+  uri: string,
+  filename: string,
+  mimeType: string,
+): Promise<MediaAsset> =>
+  uploadImageFile(
+    `/media/conversations/${conversationId}/attachments`,
+    uri,
+    filename,
+    mimeType,
+  );
