@@ -98,13 +98,13 @@ export function useConversation({
     [conversationId, validConversation],
   );
 
-  const loadOlderMessages = useCallback(async () => {
+  const loadOlderMessages = useCallback(async (): Promise<boolean> => {
     if (
       !validConversation ||
       isLoadingOlder ||
       noOlderPages
     ) {
-      return;
+      return false;
     }
 
     const current =
@@ -113,7 +113,7 @@ export function useConversation({
       ) ?? [];
     const oldestMessage = current.find((message) => message.id > 0);
 
-    if (!oldestMessage) return;
+    if (!oldestMessage) return false;
 
     setIsLoadingOlder(true);
     try {
@@ -123,30 +123,24 @@ export function useConversation({
       queryClient.setQueryData<MessagingMessage[]>(
         messageKeys.conversation(conversationId),
         (latest) => {
-          const combined = new Map<number, MessagingMessage>();
+          const combined = new Map<string, MessagingMessage>();
           for (const message of [...older, ...((latest ?? []) as MessagingMessage[])]) {
-            combined.set(message.id, message);
-          }
-          const byClientId = new Map<string, MessagingMessage>();
-          const result: MessagingMessage[] = [];
-          for (const message of combined.values()) {
-            if (message.client_message_id) {
-              const prior = byClientId.get(message.client_message_id);
-              if (prior) {
-                Object.assign(prior, message);
-                continue;
-              }
-              byClientId.set(message.client_message_id, message);
+            const key = message.client_message_id
+              ? "client:" + message.client_message_id
+              : "id:" + message.id;
+            const prior = combined.get(key);
+            if (!prior || (prior.id <= 0 && message.id > 0)) {
+              combined.set(key, message);
             }
-            result.push(message);
           }
-          return result.sort((a, b) => {
+          return [...combined.values()].sort((a, b) => {
             const timeDifference =
               new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
             return timeDifference || a.id - b.id;
           });
         },
       );
+      return older.length > 0;
     } finally {
       setIsLoadingOlder(false);
     }
