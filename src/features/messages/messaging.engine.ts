@@ -1,6 +1,7 @@
 import type { QueryClient } from "@tanstack/react-query";
 import {
   API_BASE_URL,
+  getDeliveryEvents,
   markMessageAsRead,
   sendMessage as sendMessageRequest,
   type Message,
@@ -53,10 +54,12 @@ type PendingSend = SendPayload & {
 
 type ServerEvent = {
   type?: string;
+  event_id?: number;
   message?: Message;
   message_id?: number;
   reader_id?: number;
   read_at?: string | null;
+  deleted_at?: string | null;
   conversation_id?: number;
   user_id?: number;
   online?: boolean;
@@ -146,6 +149,8 @@ class MessagingEngine {
 
   private pendingSends = new Map<string, PendingSend>();
   private failedSends = new Map<string, SendPayload>();
+  private eventCursors = new Map<number, number>();
+  private eventSyncs = new Map<number, Promise<void>>();
 
   configure(queryClient: QueryClient) {
     this.queryClient = queryClient;
@@ -261,7 +266,8 @@ class MessagingEngine {
         error: null,
       });
 
-      // Recover messages that may have arrived while disconnected.
+      // Replay persisted server events first; history refetch remains a fallback.
+      void this.syncDeliveryEvents(conversationId);
       void this.queryClient?.invalidateQueries({
         queryKey: messageKeys.conversation(conversationId),
       });
@@ -336,7 +342,11 @@ class MessagingEngine {
     }, delay);
   }
 
-  private handleEvent(conversationId: number, rawData: unknown) {
+  private handleEvent(
+    conversationId: number,
+    rawData: unknown,
+    replaying = false,
+  ) {
     if (typeof rawData !== "string") return;
 
     let payload: ServerEvent;
@@ -395,12 +405,35 @@ class MessagingEngine {
       this.acceptCanonicalMessage(conversationId, incoming);
 
       if (
+        !replaying &&
         currentUserId != null &&
         incoming.sender_id !== currentUserId &&
         !incoming.read_at
       ) {
         this.markAsRead(conversationId, incoming.id);
       }
+
+      return;
+    }
+
+    if (payload.type === "message_deleted") {
+      const messageId = Number(payload.message_id);
+      if (!Number.isInteger(messageId) || messageId <= 0) return;
+
+      this.queryClient?.setQueryData<MessagingMessage[]>(
+        messageKeys.conversation(conversationId),
+        (current) =>
+          current?.map((message) =>
+            message.id === messageId
+              ? {
+                  ...message,
+                  content: "",
+                  attachments: [],
+                  deleted_at: payload.deleted_at ?? new Date().toISOString(),
+                }
+              : message,
+          ),
+      );
 
       return;
     }
@@ -432,6 +465,40 @@ class MessagingEngine {
             : "A messaging error occurred.",
       });
     }
+  }
+
+
+  private syncDeliveryEvents(conversationId: number): Promise<void> {
+    const activeSync = this.eventSyncs.get(conversationId);
+    if (activeSync) return activeSync;
+
+    const sync = (async () => {
+      let cursor = this.eventCursors.get(conversationId) ?? 0;
+
+      try {
+        while (this.listeners.has(conversationId)) {
+          const events = await getDeliveryEvents(conversationId, cursor, 100);
+          if (events.length === 0) break;
+
+          for (const event of events) {
+            if (event.id <= cursor) continue;
+            this.handleEvent(conversationId, JSON.stringify(event.payload), true);
+            cursor = event.id;
+            this.eventCursors.set(conversationId, cursor);
+          }
+
+          if (events.length < 100) break;
+        }
+      } catch {
+        // Keep the last successfully processed cursor. The next reconnect
+        // retries from that point without losing unprocessed events.
+      }
+    })().finally(() => {
+      this.eventSyncs.delete(conversationId);
+    });
+
+    this.eventSyncs.set(conversationId, sync);
+    return sync;
   }
 
   private acceptCanonicalMessage(conversationId: number, message: Message) {
