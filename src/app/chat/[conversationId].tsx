@@ -94,7 +94,6 @@ export default function ConversationScreen() {
     sendMessage,
     retryMessage,
     sendTyping,
-    markAsRead,
     loadOlderMessages,
     hasOlderMessages,
     isLoadingOlder,
