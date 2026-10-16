@@ -1,8 +1,9 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { getMessages, type Message } from "../../services/api";
+import { getMessages } from "../../services/api";
 
 import { useMessages } from "./messages.queries";
+import { messageKeys } from "./messages.keys";
 import {
   messagingEngine,
   type MessagingMessage,
@@ -99,11 +100,7 @@ export function useConversation({
   );
 
   const loadOlderMessages = useCallback(async (): Promise<boolean> => {
-    if (
-      !validConversation ||
-      isLoadingOlder ||
-      noOlderPages
-    ) {
+    if (!validConversation || isLoadingOlder || noOlderPages) {
       return false;
     }
 
@@ -124,7 +121,10 @@ export function useConversation({
         messageKeys.conversation(conversationId),
         (latest) => {
           const combined = new Map<string, MessagingMessage>();
-          for (const message of [...older, ...((latest ?? []) as MessagingMessage[])]) {
+          for (const message of [
+            ...older,
+            ...((latest ?? []) as MessagingMessage[]),
+          ]) {
             const key = message.client_message_id
               ? "client:" + message.client_message_id
               : "id:" + message.id;
@@ -135,7 +135,8 @@ export function useConversation({
           }
           return [...combined.values()].sort((a, b) => {
             const timeDifference =
-              new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+              new Date(a.created_at).getTime() -
+              new Date(b.created_at).getTime();
             return timeDifference || a.id - b.id;
           });
         },
