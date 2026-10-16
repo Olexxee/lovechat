@@ -1,6 +1,7 @@
 import type { QueryClient } from "@tanstack/react-query";
 import {
   API_BASE_URL,
+  deleteMessage as deleteMessageRequest,
   markMessageAsRead,
   sendMessage as sendMessageRequest,
   type Message,
@@ -42,6 +43,7 @@ type SendPayload = {
   attachmentIds: number[];
   clientMessageId: string;
   localId: string;
+  replyToMessageId: number | null;
 };
 
 type PendingSend = SendPayload & {
@@ -58,6 +60,7 @@ type ServerEvent = {
   reader_id?: number;
   read_at?: string | null;
   conversation_id?: number;
+  deleted_at?: string | null;
   user_id?: number;
   online?: boolean;
   is_typing?: boolean;
@@ -85,14 +88,19 @@ function createClientMessageId(): string {
     return globalThis.crypto.randomUUID();
   }
 
-  return `${Date.now()}-${Math.random().toString(36).slice(2)}-${Math.random()
-    .toString(36)
-    .slice(2)}`;
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(
+    /[xy]/g,
+    (character) => {
+      const random = Math.floor(Math.random() * 16);
+      const value = character === "x" ? random : (random & 0x3) | 0x8;
+
+      return value.toString(16);
+    },
+  );
 }
 
 function createLocalId(): string {
   localMessageSequence += 1;
-
   return `local-${Date.now()}-${localMessageSequence}`;
 }
 
@@ -134,6 +142,24 @@ function mergeMessage(
   };
 
   return sortMessages(updated);
+}
+
+function applyMessageDeletion(
+  current: MessagingMessage[] | undefined,
+  messageId: number,
+  deletedAt: string,
+): MessagingMessage[] {
+  return (current ?? []).map((message) =>
+    message.id === messageId
+      ? {
+          ...message,
+          content: "",
+          deleted_at: deletedAt,
+          attachments: [],
+          delivery_status: message.delivery_status,
+        }
+      : message,
+  );
 }
 
 class MessagingEngine {
@@ -261,12 +287,10 @@ class MessagingEngine {
         error: null,
       });
 
-      // Recover messages that may have arrived while disconnected.
       void this.queryClient?.invalidateQueries({
         queryKey: messageKeys.conversation(conversationId),
       });
 
-      // Retry any sends that previously failed while this screen is active.
       for (const payload of this.failedSends.values()) {
         if (payload.conversationId === conversationId) {
           void this.retryMessage(conversationId, payload.clientMessageId);
@@ -276,7 +300,6 @@ class MessagingEngine {
 
     socket.onmessage = (event) => {
       if (connection.socket !== socket) return;
-
       this.handleEvent(conversationId, event.data);
     };
 
@@ -354,7 +377,6 @@ class MessagingEngine {
         connectionStatus: "connected",
         error: null,
       });
-
       return;
     }
 
@@ -364,7 +386,6 @@ class MessagingEngine {
           partnerOnline: Boolean(payload.online),
         });
       }
-
       return;
     }
 
@@ -383,7 +404,6 @@ class MessagingEngine {
       if (currentUserId == null || Number(payload.user_id) !== currentUserId) {
         this.updateState(conversationId, { isTyping });
       }
-
       return;
     }
 
@@ -401,7 +421,28 @@ class MessagingEngine {
       ) {
         this.markAsRead(conversationId, incoming.id);
       }
+      return;
+    }
 
+    if (payload.type === "message_deleted") {
+      const eventConversationId = payload.conversation_id;
+
+      if (
+        eventConversationId != null &&
+        eventConversationId !== conversationId
+      ) {
+        return;
+      }
+
+      const messageId = Number(payload.message_id);
+
+      if (!Number.isInteger(messageId) || messageId <= 0) return;
+
+      this.applyDeletion(
+        conversationId,
+        messageId,
+        payload.deleted_at ?? new Date().toISOString(),
+      );
       return;
     }
 
@@ -420,7 +461,6 @@ class MessagingEngine {
               : message,
           ),
       );
-
       return;
     }
 
@@ -432,6 +472,17 @@ class MessagingEngine {
             : "A messaging error occurred.",
       });
     }
+  }
+
+  private applyDeletion(
+    conversationId: number,
+    messageId: number,
+    deletedAt: string,
+  ) {
+    this.queryClient?.setQueryData<MessagingMessage[]>(
+      messageKeys.conversation(conversationId),
+      (current) => applyMessageDeletion(current, messageId, deletedAt),
+    );
   }
 
   private acceptCanonicalMessage(conversationId: number, message: Message) {
@@ -461,6 +512,7 @@ class MessagingEngine {
     conversationId: number,
     content: string,
     attachmentIds: number[] = [],
+    replyToMessageId?: number | null,
   ): Promise<Message> {
     const trimmedContent = content.trim();
 
@@ -474,6 +526,7 @@ class MessagingEngine {
       attachmentIds,
       clientMessageId: createClientMessageId(),
       localId: createLocalId(),
+      replyToMessageId: replyToMessageId ?? null,
     };
 
     const optimisticMessage: MessagingMessage = {
@@ -485,6 +538,8 @@ class MessagingEngine {
       created_at: new Date().toISOString(),
       read_at: null,
       deleted_at: null,
+      reply_to_message_id: payload.replyToMessageId,
+      reply_to: null,
       attachments: [],
       local_id: payload.localId,
       delivery_status: "sending",
@@ -562,6 +617,7 @@ class MessagingEngine {
               content: payload.content,
               attachment_ids: payload.attachmentIds,
               client_message_id: payload.clientMessageId,
+              reply_to_message_id: payload.replyToMessageId,
             }),
           );
 
@@ -571,7 +627,7 @@ class MessagingEngine {
 
           return;
         } catch {
-          // REST fallback below uses the same idempotency key.
+          // REST fallback uses the same idempotency key.
         }
       }
 
@@ -591,21 +647,23 @@ class MessagingEngine {
         pending.content,
         pending.attachmentIds,
         pending.clientMessageId,
+        pending.replyToMessageId,
       );
 
       this.acceptCanonicalMessage(pending.conversationId, message);
     } catch (error) {
-      // The socket may have delivered the canonical message while REST failed.
       if (!this.pendingSends.has(pending.clientMessageId)) return;
 
       this.clearPendingTimer(pending);
       this.pendingSends.delete(pending.clientMessageId);
+
       this.failedSends.set(pending.clientMessageId, {
         conversationId: pending.conversationId,
         content: pending.content,
         attachmentIds: pending.attachmentIds,
         clientMessageId: pending.clientMessageId,
         localId: pending.localId,
+        replyToMessageId: pending.replyToMessageId,
       });
 
       this.queryClient?.setQueryData<MessagingMessage[]>(
@@ -638,6 +696,21 @@ class MessagingEngine {
     }
   }
 
+  async deleteMessage(
+    conversationId: number,
+    messageId: number,
+  ): Promise<Message> {
+    const deletedMessage = await deleteMessageRequest(messageId);
+
+    this.applyDeletion(
+      conversationId,
+      messageId,
+      deletedMessage.deleted_at ?? new Date().toISOString(),
+    );
+
+    return deletedMessage;
+  }
+
   sendTyping(conversationId: number, typing: boolean) {
     this.sendEvent(conversationId, {
       type: typing ? "typing_start" : "typing_stop",
@@ -659,7 +732,7 @@ class MessagingEngine {
           );
         })
         .catch(() => {
-          // Read receipts can be retried when the next message sync occurs.
+          // Read receipts can be retried on a later message sync.
         });
     }
 

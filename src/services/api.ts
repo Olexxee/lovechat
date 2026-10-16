@@ -1,7 +1,8 @@
 import { Platform } from "react-native";
 
 export const API_BASE_URL = (
-  process.env.EXPO_PUBLIC_API_URL ?? "http://127.0.0.1:8000/api"
+  process.env.EXPO_PUBLIC_API_URL ??
+  "https://love-chat-backend-xi5u.onrender.com/api"
 ).replace(/\/$/, "");
 
 export type User = {
@@ -18,6 +19,13 @@ export type RelationshipPartner = {
   name: string;
   avatar_url: string | null;
 };
+
+export interface SendMessagePayload {
+  content: string;
+  attachment_ids?: number[];
+  client_message_id?: string;
+  reply_to_message_id?: number | null;
+}
 
 export type Relationship = {
   id: number;
@@ -39,17 +47,29 @@ export type MessageAttachment = {
   height: number | null;
 };
 
-export type Message = {
+export interface MessageReplyPreview {
+  sender_name: string;
+  attachments: any;
+  id: number;
+  sender_id: number;
+  content: string;
+  deleted_at: string | null;
+  has_attachments: boolean;
+}
+
+export interface Message {
   id: number;
   conversation_id: number;
   sender_id: number;
-  client_message_id?: string | null;
+  client_message_id: string | null;
   content: string;
   created_at: string;
   read_at: string | null;
   deleted_at: string | null;
+  reply_to_message_id: number | null;
+  reply_to: MessageReplyPreview | null;
   attachments: MessageAttachment[];
-};
+}
 
 export type MediaAsset = {
   id: number;
@@ -219,16 +239,27 @@ export async function sendMessage(
   content: string,
   attachmentIds: number[] = [],
   clientMessageId?: string,
+  replyToMessageId?: number | null,
 ): Promise<Message> {
+  const payload: SendMessagePayload = {
+    content,
+    attachment_ids: attachmentIds,
+    ...(clientMessageId ? { client_message_id: clientMessageId } : {}),
+    ...(replyToMessageId !== undefined
+      ? { reply_to_message_id: replyToMessageId }
+      : {}),
+  };
+
   return request<Message>(`/conversations/${conversationId}/messages`, {
     method: "POST",
-    body: JSON.stringify({
-      content,
-      attachment_ids: attachmentIds,
-      ...(clientMessageId ? { client_message_id: clientMessageId } : {}),
-    }),
+    body: JSON.stringify(payload),
   });
 }
+
+export const deleteMessage = (messageId: number): Promise<Message> =>
+  request<Message>(`/messages/${messageId}`, {
+    method: "DELETE",
+  });
 
 /* -------------------------------------------------------------------------- */
 /* Media                                                                      */

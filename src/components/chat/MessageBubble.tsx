@@ -1,8 +1,15 @@
-import React, { useEffect, useRef } from "react";
-import { Animated, StyleSheet, Text, View } from "react-native";
+import React, { useEffect, useRef, useState } from "react";
+import {
+  Animated,
+  Modal,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 
 import ImageAttachment from "./ImageAttachment";
-import { Message } from "../../services/api";
+import type { Message } from "../../services/api";
 import { colors, radius, spacing } from "../../constants/theme";
 
 type Props = {
@@ -11,7 +18,27 @@ type Props = {
   showDate: boolean;
   dateLabel: string;
   timeLabel: string;
+  onReply: (message: Message) => void;
+  onDelete: (message: Message) => void;
 };
+
+function getMessagePreview(message: Message): string {
+  if (message.deleted_at) {
+    return "This message was deleted";
+  }
+
+  const content = message.content?.trim();
+
+  if (content) {
+    return content;
+  }
+
+  if ((message.attachments ?? []).length > 0) {
+    return "Photo attachment";
+  }
+
+  return "Message";
+}
 
 export default function MessageBubble({
   item,
@@ -19,8 +46,11 @@ export default function MessageBubble({
   showDate,
   dateLabel,
   timeLabel,
+  onReply,
+  onDelete,
 }: Props) {
   const appear = useRef(new Animated.Value(0)).current;
+  const [menuVisible, setMenuVisible] = useState(false);
 
   useEffect(() => {
     Animated.spring(appear, {
@@ -39,6 +69,22 @@ export default function MessageBubble({
 
   const hasContent = !item.deleted_at && !!item.content?.trim();
   const attachments = item.deleted_at ? [] : (item.attachments ?? []);
+  const replyPreview = item.reply_to;
+
+  const canReply = !item.deleted_at;
+  const canDelete = isMine && !item.deleted_at;
+
+  const closeMenu = () => setMenuVisible(false);
+
+  const handleReply = () => {
+    closeMenu();
+    onReply(item);
+  };
+
+  const handleDelete = () => {
+    closeMenu();
+    onDelete(item);
+  };
 
   return (
     <View>
@@ -55,7 +101,9 @@ export default function MessageBubble({
           { opacity: appear, transform: [{ translateY }] },
         ]}
       >
-        <View
+        <Pressable
+          delayLongPress={300}
+          onLongPress={() => setMenuVisible(true)}
           style={[
             styles.messageBubble,
             isMine ? styles.myBubble : styles.theirBubble,
@@ -63,6 +111,12 @@ export default function MessageBubble({
               attachments.length > 0 &&
               styles.attachmentOnlyBubble,
           ]}
+          accessibilityRole="button"
+          accessibilityLabel={
+            `${isMine ? "Your message" : "Message received"}. ` +
+            getMessagePreview(item)
+          }
+          accessibilityHint="Long press for message actions"
         >
           {item.deleted_at ? (
             <Text
@@ -76,6 +130,42 @@ export default function MessageBubble({
             </Text>
           ) : (
             <>
+              {replyPreview && (
+                <View
+                  style={[
+                    styles.replyPreview,
+                    isMine
+                      ? styles.myReplyPreview
+                      : styles.theirReplyPreview,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.replyAuthor,
+                      isMine && styles.myReplyAuthor,
+                    ]}
+                    numberOfLines={1}
+                  >
+                    {replyPreview.sender_name ?? "Message"}
+                  </Text>
+
+                  <Text
+                    style={[
+                      styles.replyText,
+                      isMine && styles.myReplyText,
+                    ]}
+                    numberOfLines={2}
+                  >
+                    {replyPreview.deleted_at
+                      ? "This message was deleted"
+                      : replyPreview.content?.trim() ||
+                        (replyPreview.attachments?.length
+                          ? "Photo attachment"
+                          : "Message")}
+                  </Text>
+                </View>
+              )}
+
               {attachments.length > 0 && (
                 <View style={styles.attachments}>
                   {attachments.map((attachment) => (
@@ -117,8 +207,49 @@ export default function MessageBubble({
               </Text>
             )}
           </View>
-        </View>
+        </Pressable>
       </Animated.View>
+
+      <Modal
+        visible={menuVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={closeMenu}
+      >
+        <Pressable style={styles.menuBackdrop} onPress={closeMenu}>
+          <Pressable
+            style={styles.actionMenu}
+            onPress={(event) => event.stopPropagation()}
+          >
+            <Text style={styles.menuHeading}>Message actions</Text>
+
+            {canReply && (
+              <Pressable
+                style={styles.menuAction}
+                onPress={handleReply}
+              >
+                <Text style={styles.menuActionText}>Reply</Text>
+              </Pressable>
+            )}
+
+            {canDelete && (
+              <Pressable
+                style={styles.menuAction}
+                onPress={handleDelete}
+              >
+                <Text style={styles.deleteActionText}>Delete message</Text>
+              </Pressable>
+            )}
+
+            <Pressable
+              style={[styles.menuAction, styles.cancelAction]}
+              onPress={closeMenu}
+            >
+              <Text style={styles.menuActionText}>Cancel</Text>
+            </Pressable>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </View>
   );
 }
@@ -190,6 +321,38 @@ const styles = StyleSheet.create({
     fontStyle: "italic",
     opacity: 0.8,
   },
+  replyPreview: {
+    borderLeftWidth: 3,
+    borderRadius: radius.sm,
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.sm,
+    marginBottom: spacing.sm,
+  },
+  myReplyPreview: {
+    borderLeftColor: "#FBE4E8",
+    backgroundColor: "rgba(0, 0, 0, 0.12)",
+  },
+  theirReplyPreview: {
+    borderLeftColor: colors.primary,
+    backgroundColor: colors.surfaceSoft,
+  },
+  replyAuthor: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: colors.primary,
+    marginBottom: 2,
+  },
+  myReplyAuthor: {
+    color: "#FFFFFF",
+  },
+  replyText: {
+    fontSize: 12,
+    lineHeight: 17,
+    color: colors.textSecondary,
+  },
+  myReplyText: {
+    color: "#FBE4E8",
+  },
   messageMeta: {
     flexDirection: "row",
     justifyContent: "flex-end",
@@ -209,4 +372,48 @@ const styles = StyleSheet.create({
     fontWeight: "800",
   },
   readReceipt: { color: "#D9F2FF" },
+  menuBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.45)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: spacing.xl,
+  },
+  actionMenu: {
+    width: "100%",
+    maxWidth: 320,
+    padding: spacing.sm,
+    borderRadius: radius.xl,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  menuHeading: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: colors.textSecondary,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+  },
+  menuAction: {
+    minHeight: 48,
+    justifyContent: "center",
+    paddingHorizontal: spacing.md,
+    borderRadius: radius.md,
+  },
+  menuActionText: {
+    color: colors.text,
+    fontSize: 15,
+    fontWeight: "600",
+  },
+  deleteActionText: {
+    color: "#D9364F",
+    fontSize: 15,
+    fontWeight: "600",
+  },
+  cancelAction: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
+    marginTop: spacing.xs,
+  },
 });

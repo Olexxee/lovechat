@@ -12,6 +12,7 @@ import * as ImagePicker from "expo-image-picker";
 
 import PressableScale from "../PressableScale";
 import { colors, radius, spacing } from "../../constants/theme";
+import type { Message } from "../../services/api";
 
 export type PendingAttachment = {
   id: string;
@@ -32,6 +33,8 @@ type Props = {
   onTypingChange: (isTyping: boolean) => void;
   isSending: boolean;
   maxAttachments?: number;
+  replyingTo: Message | null;
+  onCancelReply: () => void;
 };
 
 export default function Composer({
@@ -44,19 +47,24 @@ export default function Composer({
   onTypingChange,
   isSending,
   maxAttachments = 5,
+  replyingTo,
+  onCancelReply,
 }: Props) {
   const canSend =
     !isSending && (draft.trim().length > 0 || attachments.length > 0);
 
   const pickImages = useCallback(async () => {
+    const remaining = maxAttachments - attachments.length;
+
+    if (remaining <= 0) {
+      return;
+    }
+
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
 
     if (!permission.granted) {
       return;
     }
-
-    const remaining = maxAttachments - attachments.length;
-    if (remaining <= 0) return;
 
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ["images"],
@@ -65,7 +73,9 @@ export default function Composer({
       quality: 0.8,
     });
 
-    if (result.canceled) return;
+    if (result.canceled) {
+      return;
+    }
 
     const files: PendingAttachment[] = result.assets.map((asset) => ({
       id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
@@ -87,8 +97,38 @@ export default function Composer({
     [onChangeDraft, onTypingChange],
   );
 
+  const replyPreviewText = replyingTo
+    ? replyingTo.deleted_at
+      ? "This message was deleted"
+      : replyingTo.content.trim() ||
+        (replyingTo.attachments.length > 0 ? "Photo attachment" : "Message")
+    : "";
+
   return (
     <View style={styles.area}>
+      {replyingTo && (
+        <View style={styles.replyPreview}>
+          <View style={styles.replyAccent} />
+
+          <View style={styles.replyContent}>
+            <Text style={styles.replyTitle}>Replying to message</Text>
+            <Text numberOfLines={2} style={styles.replyText}>
+              {replyPreviewText}
+            </Text>
+          </View>
+
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Cancel reply"
+            onPress={onCancelReply}
+            hitSlop={8}
+            style={styles.cancelReplyButton}
+          >
+            <Text style={styles.cancelReplyText}>×</Text>
+          </Pressable>
+        </View>
+      )}
+
       {attachments.length > 0 && (
         <View style={styles.previewRow}>
           {attachments.map((attachment) => (
@@ -97,10 +137,13 @@ export default function Composer({
                 source={{ uri: attachment.uri }}
                 style={styles.previewImage}
               />
+
               <Pressable
                 onPress={() => onRemoveAttachment(attachment.id)}
                 style={styles.removeButton}
                 hitSlop={6}
+                accessibilityRole="button"
+                accessibilityLabel="Remove attachment"
               >
                 <Text style={styles.removeText}>×</Text>
               </Pressable>
@@ -153,7 +196,9 @@ export default function Composer({
 
       <Text style={styles.hint}>
         {attachments.length > 0
-          ? `${attachments.length} of ${maxAttachments} image${attachments.length === 1 ? "" : "s"} attached`
+          ? `${attachments.length} of ${maxAttachments} image${
+              attachments.length === 1 ? "" : "s"
+            } attached`
           : "A private conversation, just for you two."}
       </Text>
     </View>
@@ -168,6 +213,48 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     borderTopWidth: 1,
     borderTopColor: colors.border,
+  },
+  replyPreview: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: spacing.md,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.sm,
+    borderRadius: radius.md,
+    backgroundColor: colors.surfaceSoft,
+  },
+  replyAccent: {
+    width: 3,
+    alignSelf: "stretch",
+    borderRadius: 2,
+    backgroundColor: colors.primary,
+    marginRight: spacing.sm,
+  },
+  replyContent: {
+    flex: 1,
+    gap: 2,
+  },
+  replyTitle: {
+    color: colors.primaryDark,
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  replyText: {
+    color: colors.textMuted,
+    fontSize: 12,
+    lineHeight: 17,
+  },
+  cancelReplyButton: {
+    width: 30,
+    height: 30,
+    alignItems: "center",
+    justifyContent: "center",
+    marginLeft: spacing.sm,
+  },
+  cancelReplyText: {
+    color: colors.textMuted,
+    fontSize: 24,
+    lineHeight: 26,
   },
   previewRow: {
     flexDirection: "row",

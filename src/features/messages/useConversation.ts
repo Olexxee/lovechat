@@ -41,22 +41,30 @@ export function useConversation({
   useEffect(() => {
     if (!validConversation) return;
 
-    return messagingEngine.subscribe(conversationId, userId, setMessagingState);
+    return messagingEngine.subscribe(
+      conversationId,
+      userId,
+      setMessagingState,
+    );
   }, [conversationId, userId, validConversation]);
 
   const sendMessage = useCallback(
     (
       content: string,
       attachmentIds: number[] = [],
+      replyToMessageId?: number | null,
     ): Promise<MessagingMessage> => {
       if (!validConversation) {
-        return Promise.reject(new Error("This conversation is not available."));
+        return Promise.reject(
+          new Error("This conversation is not available."),
+        );
       }
 
       return messagingEngine.sendMessage(
         conversationId,
         content,
         attachmentIds,
+        replyToMessageId,
       );
     },
     [conversationId, validConversation],
@@ -65,10 +73,35 @@ export function useConversation({
   const retryMessage = useCallback(
     (clientMessageId: string): Promise<MessagingMessage> => {
       if (!validConversation) {
-        return Promise.reject(new Error("This conversation is not available."));
+        return Promise.reject(
+          new Error("This conversation is not available."),
+        );
       }
 
-      return messagingEngine.retryMessage(conversationId, clientMessageId);
+      return messagingEngine.retryMessage(
+        conversationId,
+        clientMessageId,
+      );
+    },
+    [conversationId, validConversation],
+  );
+
+  const deleteMessage = useCallback(
+    (messageId: number): Promise<MessagingMessage> => {
+      if (!validConversation) {
+        return Promise.reject(
+          new Error("This conversation is not available."),
+        );
+      }
+
+      if (!Number.isInteger(messageId) || messageId <= 0) {
+        return Promise.reject(new Error("Invalid message ID."));
+      }
+
+      return messagingEngine.deleteMessage(
+        conversationId,
+        messageId,
+      );
     },
     [conversationId, validConversation],
   );
@@ -109,6 +142,7 @@ export function useConversation({
 
     sendMessage,
     retryMessage,
+    deleteMessage,
     sendTyping,
     markAsRead,
   };
