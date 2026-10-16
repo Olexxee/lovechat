@@ -41,6 +41,7 @@ export type MessageAttachment = {
 
 export type Message = {
   id: number;
+  event_id?: number | null;
   conversation_id: number;
   sender_id: number;
   client_message_id?: string | null;
@@ -206,8 +207,40 @@ export const createRelationship = (
 /* Messages                                                                   */
 /* -------------------------------------------------------------------------- */
 
-export const getMessages = (conversationId: number): Promise<Message[]> =>
-  request<Message[]>(`/conversations/${conversationId}/messages`);
+export const getMessages = (
+  conversationId: number,
+  beforeId?: number,
+  limit = 50,
+): Promise<Message[]> => {
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (beforeId != null && beforeId > 0) params.set("before_id", String(beforeId));
+
+  return request<Message[]>(
+    `/conversations/${conversationId}/messages?${params.toString()}`,
+  );
+};
+
+export type DeliveryEvent = {
+  id: number;
+  conversation_id: number;
+  actor_id: number;
+  message_id: number | null;
+  event_type: string;
+  payload: Record<string, unknown>;
+  created_at: string;
+};
+
+export const getDeliveryEvents = (
+  conversationId: number,
+  afterId: number,
+  limit = 100,
+): Promise<DeliveryEvent[]> =>
+  request<DeliveryEvent[]>(
+    `/conversations/${conversationId}/events?${new URLSearchParams({
+      after_id: String(afterId),
+      limit: String(limit),
+    }).toString()}`,
+  );
 
 export const markMessageAsRead = (messageId: number): Promise<Message> =>
   request<Message>(`/messages/${messageId}/read`, {
