@@ -36,11 +36,10 @@ export function useConversation({
     messagingEngine.getState(conversationId),
   );
   const [isLoadingOlder, setIsLoadingOlder] = useState(false);
-  const [noOlderPages, setNoOlderPages] = useState(false);
-
-  useEffect(() => {
-    setNoOlderPages(false);
-  }, [conversationId]);
+  const [noOlderPagesByConversation, setNoOlderPagesByConversation] = useState<
+    Record<number, boolean>
+  >({});
+  const noOlderPages = Boolean(noOlderPagesByConversation[conversationId]);
 
   useEffect(() => {
     messagingEngine.configure(queryClient);
@@ -115,7 +114,12 @@ export function useConversation({
     setIsLoadingOlder(true);
     try {
       const older = await getMessages(conversationId, oldestMessage.id, 50);
-      if (older.length < 50) setNoOlderPages(true);
+      if (older.length < 50) {
+        setNoOlderPagesByConversation((current) => ({
+          ...current,
+          [conversationId]: true,
+        }));
+      }
 
       queryClient.setQueryData<MessagingMessage[]>(
         messageKeys.conversation(conversationId),
