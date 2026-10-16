@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { getMessages, type Message } from "../../services/api";
 
 import { useMessages } from "./messages.queries";
 import {
@@ -33,6 +34,12 @@ export function useConversation({
   const [messagingState, setMessagingState] = useState<MessagingState>(() =>
     messagingEngine.getState(conversationId),
   );
+  const [isLoadingOlder, setIsLoadingOlder] = useState(false);
+  const [noOlderPages, setNoOlderPages] = useState(false);
+
+  useEffect(() => {
+    setNoOlderPages(false);
+  }, [conversationId]);
 
   useEffect(() => {
     messagingEngine.configure(queryClient);
@@ -91,6 +98,69 @@ export function useConversation({
     [conversationId, validConversation],
   );
 
+  const loadOlderMessages = useCallback(async () => {
+    if (
+      !validConversation ||
+      isLoadingOlder ||
+      noOlderPages
+    ) {
+      return;
+    }
+
+    const current =
+      queryClient.getQueryData<MessagingMessage[]>(
+        messageKeys.conversation(conversationId),
+      ) ?? [];
+    const oldestMessage = current.find((message) => message.id > 0);
+
+    if (!oldestMessage) return;
+
+    setIsLoadingOlder(true);
+    try {
+      const older = await getMessages(conversationId, oldestMessage.id, 50);
+      if (older.length < 50) setNoOlderPages(true);
+
+      queryClient.setQueryData<MessagingMessage[]>(
+        messageKeys.conversation(conversationId),
+        (latest) => {
+          const combined = new Map<number, MessagingMessage>();
+          for (const message of [...older, ...((latest ?? []) as MessagingMessage[])]) {
+            combined.set(message.id, message);
+          }
+          const byClientId = new Map<string, MessagingMessage>();
+          const result: MessagingMessage[] = [];
+          for (const message of combined.values()) {
+            if (message.client_message_id) {
+              const prior = byClientId.get(message.client_message_id);
+              if (prior) {
+                Object.assign(prior, message);
+                continue;
+              }
+              byClientId.set(message.client_message_id, message);
+            }
+            result.push(message);
+          }
+          return result.sort((a, b) => {
+            const timeDifference =
+              new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+            return timeDifference || a.id - b.id;
+          });
+        },
+      );
+    } finally {
+      setIsLoadingOlder(false);
+    }
+  }, [
+    conversationId,
+    isLoadingOlder,
+    noOlderPages,
+    queryClient,
+    validConversation,
+  ]);
+
+  const hasOlderMessages =
+    !noOlderPages && (messagesQuery.data?.length ?? 0) >= 50;
+
   const refetch = useCallback(
     () => messagesQuery.refetch(),
     [messagesQuery.refetch],
@@ -101,6 +171,9 @@ export function useConversation({
     isLoading: messagesQuery.isLoading,
     queryError: messagesQuery.error,
     refetch,
+    loadOlderMessages,
+    hasOlderMessages,
+    isLoadingOlder,
 
     connectionStatus: messagingState.connectionStatus,
     isTyping: messagingState.isTyping,
