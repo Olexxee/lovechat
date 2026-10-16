@@ -72,6 +72,7 @@ export default function ConversationScreen() {
   const conversationId = Number(rawConversationId);
 
   const listRef = useRef<FlatList<MessagingMessage>>(null);
+  const skipNextAutoScroll = useRef(false);
 
   const [relationship, setRelationship] = useState<Relationship | null>(null);
   const [draft, setDraft] = useState("");
@@ -94,6 +95,9 @@ export default function ConversationScreen() {
     retryMessage,
     sendTyping,
     markAsRead,
+    loadOlderMessages,
+    hasOlderMessages,
+    isLoadingOlder,
   } = useConversation({
     conversationId,
     userId: user?.id ?? 0,
@@ -224,6 +228,19 @@ export default function ConversationScreen() {
     sendTyping,
   ]);
 
+  const handleLoadOlder = useCallback(async () => {
+    skipNextAutoScroll.current = true;
+    try {
+      const loaded = await loadOlderMessages();
+      if (!loaded) skipNextAutoScroll.current = false;
+    } catch (err) {
+      skipNextAutoScroll.current = false;
+      setError(
+        err instanceof Error ? err.message : "Unable to load older messages.",
+      );
+    }
+  }, [loadOlderMessages]);
+
   const handleRetry = useCallback(
     async (clientMessageId: string) => {
       setError("");
@@ -353,8 +370,29 @@ export default function ConversationScreen() {
               messages.length === 0 && styles.emptyList,
             ]}
             showsVerticalScrollIndicator={false}
-            onContentSizeChange={() =>
-              listRef.current?.scrollToEnd({ animated: true })
+            onContentSizeChange={() => {
+              if (skipNextAutoScroll.current) {
+                skipNextAutoScroll.current = false;
+                return;
+              }
+              listRef.current?.scrollToEnd({ animated: true });
+            }}
+            ListHeaderComponent={
+              hasOlderMessages ? (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Load earlier messages"
+                  onPress={() => void handleLoadOlder()}
+                  disabled={isLoadingOlder}
+                  style={styles.loadEarlierAction}
+                >
+                  {isLoadingOlder ? (
+                    <ActivityIndicator size="small" color={colors.primary} />
+                  ) : (
+                    <Text style={styles.loadEarlierText}>Load earlier messages</Text>
+                  )}
+                </Pressable>
+              ) : null
             }
             ListEmptyComponent={
               <View style={styles.emptyState}>
@@ -466,6 +504,18 @@ const styles = StyleSheet.create({
   loadingText: {
     color: colors.textSecondary,
     fontSize: 13,
+  },
+  loadEarlierAction: {
+    alignSelf: "center",
+    minHeight: 38,
+    justifyContent: "center",
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+  },
+  loadEarlierText: {
+    color: colors.primary,
+    fontSize: 12,
+    fontWeight: "700",
   },
   deliveryLabel: {
     alignSelf: "flex-end",
