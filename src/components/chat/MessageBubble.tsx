@@ -287,18 +287,11 @@ const styles = StyleSheet.create({
     paddingTop: spacing.xs,
   },
   myBubble: {
-    backgroundColor: colors.primary,
+    backgroundColor: colors.primaryDark,
     borderBottomRightRadius: 5,
-    shadowColor: colors.primary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.18,
-    shadowRadius: 10,
-    elevation: 2,
   },
   theirBubble: {
     backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
     borderBottomLeftRadius: 5,
   },
   attachments: {
@@ -339,7 +332,7 @@ const styles = StyleSheet.create({
   replyAuthor: {
     fontSize: 11,
     fontWeight: "800",
-    color: colors.primary,
+    color: colors.primaryDark,
     marginBottom: 2,
   },
   myReplyAuthor: {
