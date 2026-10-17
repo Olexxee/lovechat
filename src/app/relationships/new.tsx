@@ -1,10 +1,8 @@
-import React, { useRef, useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
-  Animated,
   KeyboardAvoidingView,
   Platform,
-  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -15,8 +13,12 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 
 import PressableScale from "../../components/PressableScale";
-import Reveal from "../../components/Reveal";
-import { createRelationship, RelationshipType } from "../../services/api";
+import {
+  createRelationship,
+  searchUsers,
+  type RelationshipType,
+  type UserSearchResult,
+} from "../../services/api";
 import { colors, radius, spacing, typography } from "../../constants/theme";
 
 const relationshipTypes: {
@@ -24,130 +26,88 @@ const relationshipTypes: {
   value: RelationshipType;
   description: string;
 }[] = [
-  {
-    label: "Romantic",
-    value: "ROMANTIC",
-    description: "Your partner or significant other",
-  },
-  {
-    label: "Friend",
-    value: "FRIEND",
-    description: "Someone you value as a friend",
-  },
-  {
-    label: "Family",
-    value: "FAMILY",
-    description: "A member of your family",
-  },
-  {
-    label: "Other",
-    value: "OTHER",
-    description: "Another important connection",
-  },
+  { label: "Romantic", value: "ROMANTIC", description: "Your partner or significant other" },
+  { label: "Friend", value: "FRIEND", description: "Someone you value as a friend" },
+  { label: "Family", value: "FAMILY", description: "A member of your family" },
+  { label: "Other", value: "OTHER", description: "Another important connection" },
 ];
 
 export default function NewRelationshipScreen() {
   const router = useRouter();
-
-  const [identifier, setIdentifier] = useState("");
-  const [relationshipType, setRelationshipType] =
-    useState<RelationshipType>("ROMANTIC");
-  const [error, setError] = useState("");
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<UserSearchResult[]>([]);
+  const [selectedUser, setSelectedUser] = useState<UserSearchResult | null>(null);
+  const [relationshipType, setRelationshipType] = useState<RelationshipType>("ROMANTIC");
+  const [isSearching, setIsSearching] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isFocused, setIsFocused] = useState(false);
+  const [error, setError] = useState("");
+  const [searchError, setSearchError] = useState("");
 
-  const shake = useRef(new Animated.Value(0)).current;
-  const focus = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    const term = query.trim();
+    if (selectedUser || term.length < 2) {
+      setResults([]);
+      setSearchError("");
+      setIsSearching(false);
+      return;
+    }
 
-  const translateX = shake.interpolate({
-    inputRange: [-1, 1],
-    outputRange: [-9, 9],
-  });
+    let cancelled = false;
+    const timeout = setTimeout(async () => {
+      setIsSearching(true);
+      setSearchError("");
+      try {
+        const users = await searchUsers(term);
+        if (!cancelled) setResults(users);
+      } catch (err) {
+        if (!cancelled) {
+          setResults([]);
+          setSearchError(err instanceof Error ? err.message : "Search failed. Try again.");
+        }
+      } finally {
+        if (!cancelled) setIsSearching(false);
+      }
+    }, 300);
 
-  const borderColor = focus.interpolate({
-    inputRange: [0, 1],
-    outputRange: [colors.border, colors.primary],
-  });
+    return () => {
+      cancelled = true;
+      clearTimeout(timeout);
+    };
+  }, [query, selectedUser]);
 
-  const triggerShake = () => {
-    shake.setValue(0);
-    Animated.sequence([
-      Animated.timing(shake, {
-        toValue: 1,
-        duration: 55,
-        useNativeDriver: true,
-      }),
-      Animated.timing(shake, {
-        toValue: -1,
-        duration: 55,
-        useNativeDriver: true,
-      }),
-      Animated.timing(shake, {
-        toValue: 0.6,
-        duration: 55,
-        useNativeDriver: true,
-      }),
-      Animated.timing(shake, {
-        toValue: 0,
-        duration: 55,
-        useNativeDriver: true,
-      }),
-    ]).start();
-  };
-
-  const animateFocus = (toValue: number) =>
-    Animated.timing(focus, {
-      toValue,
-      duration: 180,
-      useNativeDriver: false,
-    }).start();
-
-  const handleCreateRelationship = async () => {
-    const normalizedIdentifier = identifier.trim();
-
-    if (!normalizedIdentifier) {
-      setError(
-        "Enter the email address of the person you want to connect with.",
-      );
-      triggerShake();
+  const submitRequest = async () => {
+    if (!selectedUser) {
+      setError("Search for and select the person you want to connect with.");
       return;
     }
 
     setError("");
     setIsSubmitting(true);
-
     try {
       await createRelationship({
-        identifier: normalizedIdentifier,
+        identifier: selectedUser.email,
         relationship_type: relationshipType,
       });
-
       router.replace("/");
     } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : "We couldn't create this relationship. Please try again.",
-      );
-      triggerShake();
+      setError(err instanceof Error ? err.message : "Couldn't send your request. Please try again.");
     } finally {
       setIsSubmitting(false);
     }
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={styles.safeArea} edges={["top"]}>
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
         <ScrollView
-          contentContainerStyle={styles.scrollContent}
+          contentContainerStyle={styles.content}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          {/* Header */}
-          <Reveal style={styles.header}>
+          <View style={styles.header}>
             <PressableScale
               accessibilityRole="button"
               accessibilityLabel="Go back"
@@ -156,147 +116,158 @@ export default function NewRelationshipScreen() {
             >
               <Text style={styles.backButtonText}>‹</Text>
             </PressableScale>
-
-            <Text style={styles.headerTitle}>New relationship</Text>
-
+            <Text style={styles.headerTitle}>New connection</Text>
             <View style={styles.headerSpacer} />
-          </Reveal>
+          </View>
 
-          {/* Intro */}
-          <Reveal delay={80} style={styles.intro}>
-            <View style={styles.heartCircle}>
-              <Text style={styles.heart}>♥</Text>
+          <View style={styles.hero}>
+            <View style={styles.heroIcon}>
+              <Text style={styles.heroHeart}>♡</Text>
+            </View>
+            <Text style={styles.eyebrow}>MAKE IT PERSONAL</Text>
+            <Text style={styles.title}>Bring someone closer.</Text>
+            <Text style={styles.subtitle}>
+              Find their LoveChat account and send a request. You can start chatting after they accept.
+            </Text>
+          </View>
+
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Who do you want to connect with?</Text>
+            <Text style={styles.helper}>Search by their name or email address.</Text>
+            <View style={styles.searchWrap}>
+              <Text style={styles.searchIcon}>⌕</Text>
+              <TextInput
+                value={selectedUser ? selectedUser.name : query}
+                onChangeText={(value) => {
+                  setSelectedUser(null);
+                  setQuery(value);
+                  setError("");
+                }}
+                placeholder="Search name or email"
+                placeholderTextColor={colors.textMuted}
+                autoCapitalize="none"
+                autoCorrect={false}
+                autoComplete="off"
+                returnKeyType="search"
+                editable={!isSubmitting}
+                style={styles.searchInput}
+                accessibilityLabel="Search people by name or email"
+              />
+              {!!(query || selectedUser) && (
+                <PressableScale
+                  accessibilityRole="button"
+                  accessibilityLabel="Clear search"
+                  onPress={() => {
+                    setQuery("");
+                    setSelectedUser(null);
+                    setResults([]);
+                    setError("");
+                  }}
+                  style={styles.clearButton}
+                >
+                  <Text style={styles.clearText}>×</Text>
+                </PressableScale>
+              )}
             </View>
 
-            <Text style={styles.title}>Bring someone closer.</Text>
+            {isSearching && (
+              <View style={styles.searchStatus}>
+                <ActivityIndicator size="small" color={colors.primary} />
+                <Text style={styles.statusText}>Searching people…</Text>
+              </View>
+            )}
+            {!!searchError && <Text style={styles.errorText}>{searchError}</Text>}
 
-            <Text style={styles.subtitle}>
-              Create a private connection with someone who already has a
-              LoveChat account.
-            </Text>
-          </Reveal>
+            {!selectedUser && query.trim().length >= 2 && !isSearching && !searchError && (
+              <View style={styles.results}>
+                {results.length ? results.map((person) => (
+                  <PressableScale
+                    key={person.id}
+                    accessibilityRole="button"
+                    onPress={() => {
+                      setSelectedUser(person);
+                      setQuery(person.name);
+                      setResults([]);
+                      setError("");
+                    }}
+                    style={styles.resultRow}
+                  >
+                    <View style={styles.avatar}>
+                      <Text style={styles.avatarText}>{person.name.trim().charAt(0).toUpperCase()}</Text>
+                    </View>
+                    <View style={styles.resultInfo}>
+                      <Text style={styles.personName} numberOfLines={1}>{person.name}</Text>
+                      <Text style={styles.personEmail} numberOfLines={1}>{person.email}</Text>
+                    </View>
+                    <Text style={styles.resultArrow}>›</Text>
+                  </PressableScale>
+                )) : (
+                  <Text style={styles.noResults}>No matching accounts found.</Text>
+                )}
+              </View>
+            )}
 
-          <Animated.View style={[styles.form, { transform: [{ translateX }] }]}>
-            <Reveal delay={160}>
-              <Text style={styles.label}>Their email address</Text>
+            {selectedUser && (
+              <View style={styles.selectedCard}>
+                <View style={styles.avatar}>
+                  <Text style={styles.avatarText}>{selectedUser.name.trim().charAt(0).toUpperCase()}</Text>
+                </View>
+                <View style={styles.resultInfo}>
+                  <Text style={styles.personName}>{selectedUser.name}</Text>
+                  <Text style={styles.personEmail}>{selectedUser.email}</Text>
+                </View>
+                <Text style={styles.selectedCheck}>✓</Text>
+              </View>
+            )}
+          </View>
 
-              <Animated.View style={[styles.inputWrap, { borderColor }]}>
-                <TextInput
-                  value={identifier}
-                  onChangeText={(value) => {
-                    setIdentifier(value);
-                    if (error) setError("");
-                  }}
-                  onFocus={() => {
-                    setIsFocused(true);
-                    animateFocus(1);
-                  }}
-                  onBlur={() => {
-                    setIsFocused(false);
-                    animateFocus(0);
-                  }}
-                  placeholder="name@example.com"
-                  placeholderTextColor={colors.textMuted}
-                  keyboardType="email-address"
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  autoComplete="email"
-                  editable={!isSubmitting}
-                  returnKeyType="done"
-                  onSubmitEditing={handleCreateRelationship}
-                  style={styles.input}
-                  accessibilityLabel="Person's email address"
-                />
-              </Animated.View>
-
-              <Text style={styles.helperText}>
-                Use the email address they registered with.
-              </Text>
-            </Reveal>
-
-            <Reveal delay={240}>
-              <Text style={[styles.label, styles.typeLabel]}>
-                What is your relationship?
-              </Text>
-            </Reveal>
-
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>What is your relationship?</Text>
+            <Text style={styles.helper}>Choose how you know each other.</Text>
             <View style={styles.typeList}>
-              {relationshipTypes.map((type, index) => {
+              {relationshipTypes.map((type) => {
                 const selected = relationshipType === type.value;
-
                 return (
-                  <Reveal key={type.value} delay={300 + index * 60}>
-                    <PressableScale
-                      accessibilityRole="radio"
-                      accessibilityState={{ checked: selected }}
-                      disabled={isSubmitting}
-                      onPress={() => setRelationshipType(type.value)}
-                      style={[
-                        styles.typeCard,
-                        selected && styles.typeCardSelected,
-                      ]}
-                    >
-                      <View style={styles.typeTextContainer}>
-                        <Text
-                          style={[
-                            styles.typeTitle,
-                            selected && styles.typeTitleSelected,
-                          ]}
-                        >
-                          {type.label}
-                        </Text>
-
-                        <Text style={styles.typeDescription}>
-                          {type.description}
-                        </Text>
-                      </View>
-
-                      <View
-                        style={[
-                          styles.radioOuter,
-                          selected && styles.radioOuterSelected,
-                        ]}
-                      >
-                        {selected && <View style={styles.radioInner} />}
-                      </View>
-                    </PressableScale>
-                  </Reveal>
+                  <PressableScale
+                    key={type.value}
+                    accessibilityRole="radio"
+                    accessibilityState={{ checked: selected }}
+                    disabled={isSubmitting}
+                    onPress={() => setRelationshipType(type.value)}
+                    style={[styles.typeCard, selected && styles.typeCardSelected]}
+                  >
+                    <View style={styles.typeCopy}>
+                      <Text style={[styles.typeTitle, selected && styles.typeTitleSelected]}>{type.label}</Text>
+                      <Text style={styles.typeDescription}>{type.description}</Text>
+                    </View>
+                    <View style={[styles.radio, selected && styles.radioSelected]}>
+                      {selected && <View style={styles.radioDot} />}
+                    </View>
+                  </PressableScale>
                 );
               })}
             </View>
+          </View>
 
-            {!!error && (
-              <Reveal duration={260} style={styles.errorContainer}>
-                <Text style={styles.errorText}>{error}</Text>
-              </Reveal>
+          {!!error && (
+            <View style={styles.errorBox}>
+              <Text style={styles.errorText}>{error}</Text>
+            </View>
+          )}
+
+          <PressableScale
+            accessibilityRole="button"
+            disabled={isSubmitting}
+            onPress={submitRequest}
+            style={[styles.submitButton, isSubmitting && styles.disabledButton]}
+          >
+            {isSubmitting ? (
+              <ActivityIndicator color={colors.white} />
+            ) : (
+              <Text style={styles.submitText}>Send relationship request  →</Text>
             )}
-
-            <Reveal delay={560}>
-              <PressableScale
-                accessibilityRole="button"
-                disabled={isSubmitting}
-                onPress={handleCreateRelationship}
-                style={[
-                  styles.submitButton,
-                  isSubmitting && styles.submitButtonDisabled,
-                ]}
-              >
-                {isSubmitting ? (
-                  <ActivityIndicator color={colors.white} />
-                ) : (
-                  <Text style={styles.submitButtonText}>
-                    Create relationship
-                  </Text>
-                )}
-              </PressableScale>
-            </Reveal>
-
-            <Reveal delay={620}>
-              <Text style={styles.privacyNote}>
-                ♥ Your connection will have its own private conversation.
-              </Text>
-            </Reveal>
-          </Animated.View>
+          </PressableScale>
+          <Text style={styles.privacyNote}>Your conversation stays locked until the request is accepted.</Text>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -304,18 +275,9 @@ export default function NewRelationshipScreen() {
 }
 
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  flex: {
-    flex: 1,
-  },
-  scrollContent: {
-    flexGrow: 1,
-    paddingHorizontal: spacing.xl,
-    paddingBottom: spacing.xxxl,
-  },
+  safeArea: { flex: 1, backgroundColor: colors.background },
+  flex: { flex: 1 },
+  content: { paddingHorizontal: spacing.xl, paddingBottom: 48 },
   header: {
     flexDirection: "row",
     alignItems: "center",
@@ -324,185 +286,59 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.xl,
   },
   backButton: {
-    width: 42,
-    height: 42,
-    borderRadius: radius.round,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    alignItems: "center",
-    justifyContent: "center",
+    width: 42, height: 42, borderRadius: radius.round, backgroundColor: colors.surface,
+    borderWidth: 1, borderColor: colors.border, alignItems: "center", justifyContent: "center",
   },
-  backButtonText: {
-    color: colors.text,
-    fontSize: 34,
-    lineHeight: 38,
-    marginTop: -4,
+  backButtonText: { color: colors.text, fontSize: 34, lineHeight: 38, marginTop: -4 },
+  headerTitle: { color: colors.text, fontSize: 17, fontWeight: "800" },
+  headerSpacer: { width: 42 },
+  hero: { alignItems: "center", paddingTop: spacing.sm, paddingBottom: spacing.xxl },
+  heroIcon: {
+    width: 68, height: 68, borderRadius: radius.round, backgroundColor: colors.surfaceSoft,
+    alignItems: "center", justifyContent: "center", marginBottom: spacing.lg,
   },
-  headerTitle: {
-    color: colors.text,
-    fontSize: 17,
-    fontWeight: "800",
+  heroHeart: { color: colors.primary, fontSize: 42, lineHeight: 46 },
+  eyebrow: { color: colors.primaryDark, fontSize: 10, fontWeight: "900", letterSpacing: 2, marginBottom: spacing.sm },
+  title: { color: colors.text, fontSize: 27, fontWeight: "900", letterSpacing: -0.7, textAlign: "center" },
+  subtitle: { color: colors.textSecondary, fontSize: 14, lineHeight: 22, textAlign: "center", marginTop: spacing.sm, maxWidth: 320 },
+  section: { marginBottom: spacing.xxl },
+  sectionTitle: { color: colors.text, fontSize: 16, fontWeight: "800" },
+  helper: { color: colors.textSecondary, fontSize: 13, marginTop: 5, marginBottom: spacing.md },
+  searchWrap: {
+    minHeight: 54, flexDirection: "row", alignItems: "center", backgroundColor: colors.surface,
+    borderWidth: 1, borderColor: colors.border, borderRadius: radius.lg, paddingHorizontal: spacing.md,
   },
-  headerSpacer: {
-    width: 42,
-  },
-  intro: {
-    alignItems: "center",
-    paddingTop: spacing.lg,
-    paddingBottom: spacing.xxl,
-  },
-  heartCircle: {
-    width: 76,
-    height: 76,
-    borderRadius: radius.round,
-    backgroundColor: colors.surfaceSoft,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: spacing.xl,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  heart: {
-    fontSize: 35,
-    color: colors.primary,
-  },
-  title: {
-    color: colors.text,
-    fontSize: 27,
-    fontWeight: "800",
-    textAlign: "center",
-    letterSpacing: -0.6,
-  },
-  subtitle: {
-    color: colors.textSecondary,
-    fontSize: 14,
-    lineHeight: 22,
-    textAlign: "center",
-    marginTop: spacing.md,
-    maxWidth: 310,
-  },
-  form: {
-    width: "100%",
-  },
-  label: {
-    color: colors.text,
-    fontSize: 14,
-    fontWeight: "800",
-    marginBottom: spacing.sm,
-  },
-  inputWrap: {
-    borderWidth: 1.5,
-    borderRadius: radius.lg,
-    backgroundColor: colors.surface,
-  },
-  input: {
-    minHeight: 54,
-    paddingHorizontal: spacing.lg,
-    color: colors.text,
-    fontSize: 15,
-  },
-  helperText: {
-    color: colors.textMuted,
-    fontSize: 12,
-    lineHeight: 18,
-    marginTop: spacing.sm,
-  },
-  typeLabel: {
-    marginTop: spacing.xxl,
-    marginBottom: spacing.md,
-  },
-  typeList: {
-    gap: spacing.md,
-  },
-  typeCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    padding: spacing.lg,
-    minHeight: 76,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
-  },
-  typeCardSelected: {
-    borderColor: colors.primary,
-    backgroundColor: colors.surfaceSoft,
-  },
-  typeTextContainer: {
-    flex: 1,
-    paddingRight: spacing.md,
-  },
-  typeTitle: {
-    color: colors.text,
-    fontSize: 15,
-    fontWeight: "800",
-  },
-  typeTitleSelected: {
-    color: colors.primaryDark,
-  },
-  typeDescription: {
-    color: colors.textSecondary,
-    fontSize: 12,
-    lineHeight: 18,
-    marginTop: spacing.xs,
-  },
-  radioOuter: {
-    width: 22,
-    height: 22,
-    borderRadius: radius.round,
-    borderWidth: 1.5,
-    borderColor: colors.border,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  radioOuterSelected: {
-    borderColor: colors.primary,
-  },
-  radioInner: {
-    width: 12,
-    height: 12,
-    borderRadius: radius.round,
-    backgroundColor: colors.primary,
-  },
-  errorContainer: {
-    backgroundColor: "#FCEBED",
-    borderRadius: radius.md,
-    padding: spacing.md,
-    marginTop: spacing.lg,
-  },
-  errorText: {
-    color: "#A52F42",
-    fontSize: 13,
-    lineHeight: 20,
-  },
-  submitButton: {
-    minHeight: 54,
-    borderRadius: radius.lg,
-    backgroundColor: colors.primary,
-    alignItems: "center",
-    justifyContent: "center",
-    marginTop: spacing.xl,
-    paddingHorizontal: spacing.lg,
-    shadowColor: colors.primary,
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.25,
-    shadowRadius: 16,
-    elevation: 4,
-  },
-  submitButtonDisabled: {
-    opacity: 0.65,
-  },
-  submitButtonText: {
-    color: colors.white,
-    fontSize: 15,
-    fontWeight: "800",
-  },
-  privacyNote: {
-    color: colors.textMuted,
-    fontSize: 12,
-    lineHeight: 19,
-    textAlign: "center",
-    marginTop: spacing.lg,
-  },
+  searchIcon: { fontSize: 26, color: colors.primary, marginRight: spacing.sm },
+  searchInput: { flex: 1, minHeight: 52, color: colors.text, fontSize: 15, paddingVertical: spacing.sm },
+  clearButton: { width: 30, height: 30, alignItems: "center", justifyContent: "center" },
+  clearText: { fontSize: 24, color: colors.textMuted },
+  searchStatus: { flexDirection: "row", alignItems: "center", gap: spacing.sm, padding: spacing.md },
+  statusText: { color: colors.textSecondary, fontSize: 13 },
+  results: { marginTop: spacing.sm, backgroundColor: colors.surface, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, overflow: "hidden" },
+  resultRow: { flexDirection: "row", alignItems: "center", padding: spacing.md, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
+  avatar: { width: 44, height: 44, borderRadius: radius.round, alignItems: "center", justifyContent: "center", backgroundColor: colors.surfaceSoft },
+  avatarText: { color: colors.primaryDark, fontSize: 18, fontWeight: "900" },
+  resultInfo: { flex: 1, marginLeft: spacing.md },
+  personName: { color: colors.text, fontSize: 14, fontWeight: "800" },
+  personEmail: { color: colors.textSecondary, fontSize: 12, marginTop: 4 },
+  resultArrow: { color: colors.textMuted, fontSize: 26, marginLeft: spacing.sm },
+  noResults: { padding: spacing.lg, color: colors.textSecondary, fontSize: 13 },
+  selectedCard: { flexDirection: "row", alignItems: "center", marginTop: spacing.sm, padding: spacing.md, borderRadius: radius.lg, backgroundColor: colors.surface, borderWidth: 1.5, borderColor: colors.primary },
+  selectedCheck: { color: colors.primary, fontSize: 20, fontWeight: "900" },
+  typeList: { gap: spacing.sm },
+  typeCard: { flexDirection: "row", alignItems: "center", minHeight: 70, padding: spacing.md, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface },
+  typeCardSelected: { borderColor: colors.primary, backgroundColor: colors.surfaceSoft },
+  typeCopy: { flex: 1, paddingRight: spacing.md },
+  typeTitle: { color: colors.text, fontSize: 14, fontWeight: "800" },
+  typeTitleSelected: { color: colors.primaryDark },
+  typeDescription: { color: colors.textSecondary, fontSize: 12, lineHeight: 17, marginTop: 3 },
+  radio: { width: 22, height: 22, borderRadius: radius.round, borderWidth: 1.5, borderColor: colors.border, alignItems: "center", justifyContent: "center" },
+  radioSelected: { borderColor: colors.primary },
+  radioDot: { width: 12, height: 12, borderRadius: radius.round, backgroundColor: colors.primary },
+  errorBox: { padding: spacing.md, backgroundColor: "#FCEBED", borderRadius: radius.md, marginBottom: spacing.md },
+  errorText: { color: "#A52F42", fontSize: 13, lineHeight: 19 },
+  submitButton: { minHeight: 54, borderRadius: radius.lg, backgroundColor: colors.primary, alignItems: "center", justifyContent: "center", paddingHorizontal: spacing.lg, marginTop: spacing.sm },
+  disabledButton: { opacity: 0.65 },
+  submitText: { color: colors.white, fontSize: 14, fontWeight: "900" },
+  privacyNote: { color: colors.textMuted, fontSize: 12, lineHeight: 18, textAlign: "center", marginTop: spacing.md },
 });

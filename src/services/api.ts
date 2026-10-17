@@ -20,6 +20,13 @@ export type RelationshipPartner = {
   avatar_url: string | null;
 };
 
+export type UserSearchResult = {
+  id: number;
+  name: string;
+  email: string;
+  avatar_url: string | null;
+};
+
 export interface SendMessagePayload {
   content: string;
   attachment_ids?: number[];
@@ -32,9 +39,11 @@ export type Relationship = {
   user_one_id: number;
   user_two_id: number;
   relationship_type: RelationshipType;
-  status: string;
+  status: "PENDING" | "ACTIVE" | "PAUSED" | "DECLINED" | "ENDED" | string;
+  requested_by_id: number;
   created_at: string;
-  conversation_id: number;
+  responded_at?: string | null;
+  conversation_id: number | null;
   partner: RelationshipPartner;
 };
 
@@ -221,6 +230,21 @@ export const createRelationship = (
   request<Relationship>("/relationships", {
     method: "POST",
     body: JSON.stringify(payload),
+  });
+
+export const searchUsers = (query: string): Promise<UserSearchResult[]> =>
+  request<UserSearchResult[]>(
+    `/relationships/search-users?${new URLSearchParams({ q: query }).toString()}`,
+  );
+
+export const acceptRelationship = (relationshipId: number): Promise<Relationship> =>
+  request<Relationship>(`/relationships/${relationshipId}/accept`, {
+    method: "POST",
+  });
+
+export const declineRelationship = (relationshipId: number): Promise<Relationship> =>
+  request<Relationship>(`/relationships/${relationshipId}/decline`, {
+    method: "POST",
   });
 
 /* -------------------------------------------------------------------------- */
