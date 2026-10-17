@@ -125,7 +125,7 @@ const styles = StyleSheet.create({
   avatar: { width: 54, height: 54, borderRadius: radius.round, alignItems: "center", justifyContent: "center", backgroundColor: colors.surfaceSoft },
   avatarText: { color: colors.primaryDark, fontSize: 18, fontWeight: "800" },
   rowInfo: { flex: 1, marginLeft: spacing.md },
-  partnerName: { color: colors.text, fontSize: 16, fontWeight: "750" as any },
+  partnerName: { color: colors.text, fontSize: 16, fontWeight: "700" },
   preview: { marginTop: 5, color: colors.textSecondary, fontSize: 13 },
   rowTrailing: { flexDirection: "row", alignItems: "center", gap: spacing.md },
   privateDot: { width: 7, height: 7, borderRadius: radius.round, backgroundColor: colors.success },
