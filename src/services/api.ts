@@ -1,8 +1,22 @@
 import { Platform } from "react-native";
 
+const DEFAULT_API_BASE_URL = "https://love-chat-backend-xi5u.onrender.com/api";
+const configuredApiUrl = process.env.EXPO_PUBLIC_API_URL?.trim();
+
+// Production builds always target the deployed HTTPS API. Local overrides are
+// allowed only in development, where localhost may be intentional.
+const isLoopbackUrl = (url: string) =>
+  /^https?:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0)(:\d+)?(\/|$)/i.test(url);
+
+const developmentApiUrl =
+  __DEV__ && configuredApiUrl && !isLoopbackUrl(configuredApiUrl)
+    ? configuredApiUrl
+    : __DEV__ && configuredApiUrl && isLoopbackUrl(configuredApiUrl)
+      ? configuredApiUrl
+      : undefined;
+
 export const API_BASE_URL = (
-  process.env.EXPO_PUBLIC_API_URL ??
-  "https://love-chat-backend-xi5u.onrender.com/api"
+  __DEV__ ? developmentApiUrl ?? DEFAULT_API_BASE_URL : DEFAULT_API_BASE_URL
 ).replace(/\/$/, "");
 
 export type User = {
