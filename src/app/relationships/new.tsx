@@ -19,7 +19,7 @@ import {
   type RelationshipType,
   type UserSearchResult,
 } from "../../services/api";
-import { colors, radius, spacing, typography } from "../../constants/theme";
+import { colors, radius, spacing } from "../../constants/theme";
 
 const relationshipTypes: {
   label: string;
