@@ -16,8 +16,11 @@ const developmentApiUrl =
       : undefined;
 
 export const API_BASE_URL = (
-  __DEV__ ? developmentApiUrl ?? DEFAULT_API_BASE_URL : DEFAULT_API_BASE_URL
+  process.env.EXPO_PUBLIC_API_URL ?? "http://127.0.0.1:8000/api"
 ).replace(/\/$/, "");
+
+
+//https://love-chat-backend-xi5u.onrender.com/api
 
 export type User = {
   id: number;
