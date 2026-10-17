@@ -6,7 +6,7 @@ const configuredApiUrl = process.env.EXPO_PUBLIC_API_URL?.trim();
 // Never ship a loopback URL in a mobile build. On a physical phone,
 // 127.0.0.1 refers to the phone itself, not the deployed API.
 const isLoopbackUrl = (url: string) =>
-  /^https?:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0)(:\\d+)?(\/|$)/i.test(url);
+  /^https?:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0)(:\d+)?(\/|$)/i.test(url);
 
 export const API_BASE_URL = (
   configuredApiUrl && !isLoopbackUrl(configuredApiUrl)
