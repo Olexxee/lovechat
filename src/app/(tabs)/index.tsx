@@ -18,7 +18,7 @@ import {
   getRelationships,
   type Relationship,
 } from "../../services/api";
-import { colors, radius, spacing, typography } from "../../constants/theme";
+import { colors, radius, spacing } from "../../constants/theme";
 
 const TAB_BAR_CLEARANCE = 116;
 
