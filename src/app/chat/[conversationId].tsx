@@ -7,6 +7,7 @@ import React, {
 } from "react";
 import {
   ActivityIndicator,
+  Alert,
   FlatList,
   KeyboardAvoidingView,
   Platform,
@@ -24,6 +25,7 @@ import TypingIndicator from "../../components/chat/TypingIndicator";
 import {
   getRelationships,
   uploadChatAttachment,
+  type Message,
   type Relationship,
 } from "../../services/api";
 import { useAuth } from "../../context/AuthContext";
@@ -76,6 +78,7 @@ export default function ConversationScreen() {
 
   const [relationship, setRelationship] = useState<Relationship | null>(null);
   const [draft, setDraft] = useState("");
+  const [replyingTo, setReplyingTo] = useState<Message | null>(null);
   const [pendingAttachments, setPendingAttachments] = useState<
     PendingAttachment[]
   >([]);
@@ -93,6 +96,7 @@ export default function ConversationScreen() {
     messagingError,
     sendMessage,
     retryMessage,
+    deleteMessage,
     sendTyping,
     loadOlderMessages,
     hasOlderMessages,
@@ -202,10 +206,11 @@ export default function ConversationScreen() {
     }
 
     try {
-      await sendMessage(content, assetIds);
+      await sendMessage(content, assetIds, replyingTo?.id ?? null);
 
       setDraft("");
       setPendingAttachments([]);
+      setReplyingTo(null);
       sendTyping(false);
     } catch (err) {
       // The engine keeps the optimistic message and its retry ID.
@@ -223,6 +228,7 @@ export default function ConversationScreen() {
     draft,
     isSending,
     pendingAttachments,
+    replyingTo,
     sendMessage,
     sendTyping,
   ]);
@@ -255,6 +261,56 @@ export default function ConversationScreen() {
     [retryMessage],
   );
 
+  const handleReply = useCallback((message: Message) => {
+    if (message.id <= 0) {
+      Alert.alert(
+        "Message not sent yet",
+        "Wait until the message has been sent before replying to it.",
+      );
+      return;
+    }
+
+    setReplyingTo(message);
+  }, []);
+
+  const handleDelete = useCallback(
+    (message: Message) => {
+      if (message.id <= 0) {
+        setError("Only sent messages can be deleted.");
+        return;
+      }
+
+      Alert.alert(
+        "Delete message?",
+        "This message will be deleted from the conversation.",
+        [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Delete",
+            style: "destructive",
+            onPress: () => {
+              setError("");
+              void deleteMessage(message.id)
+                .then(() => {
+                  setReplyingTo((current) =>
+                    current?.id === message.id ? null : current,
+                  );
+                })
+                .catch((err: unknown) => {
+                  setError(
+                    err instanceof Error
+                      ? err.message
+                      : "Unable to delete this message.",
+                  );
+                });
+            },
+          },
+        ],
+      );
+    },
+    [deleteMessage],
+  );
+
   const handleAddAttachments = useCallback((files: PendingAttachment[]) => {
     setPendingAttachments((current) => [...current, ...files]);
   }, []);
@@ -281,6 +337,8 @@ export default function ConversationScreen() {
             showDate={showDate}
             dateLabel={formatDate(item.created_at)}
             timeLabel={formatTime(item.created_at)}
+            onReply={handleReply}
+            onDelete={handleDelete}
           />
 
           {isMine && item.delivery_status === "sending" && (
@@ -307,7 +365,7 @@ export default function ConversationScreen() {
         </View>
       );
     },
-    [handleRetry, messages, user?.id],
+    [handleDelete, handleReply, handleRetry, messages, user?.id],
   );
 
   const statusLabel = useMemo(() => {
@@ -421,6 +479,8 @@ export default function ConversationScreen() {
           onSend={() => void handleSend()}
           onTypingChange={sendTyping}
           isSending={isSending}
+          replyingTo={replyingTo}
+          onCancelReply={() => setReplyingTo(null)}
         />
       </KeyboardAvoidingView>
     </SafeAreaView>
