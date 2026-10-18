@@ -236,7 +236,10 @@ class MessagingEngine {
   }
 
   private getWebSocketUrl(conversationId: number): string {
-    const websocketBase = API_BASE_URL.replace(/^http/, "ws");
+    const websocketBase = API_BASE_URL.replace(/^http/, "ws").replace(
+      /\/api\/?$/,
+      "",
+    );
 
     return `${websocketBase}/ws/chat?conversation_id=${conversationId}`;
   }
@@ -510,7 +513,11 @@ class MessagingEngine {
 
           for (const event of events) {
             if (event.id <= cursor) continue;
-            this.handleEvent(conversationId, JSON.stringify(event.payload), true);
+            this.handleEvent(
+              conversationId,
+              JSON.stringify(event.payload),
+              true,
+            );
             cursor = event.id;
             this.eventCursors.set(conversationId, cursor);
           }
