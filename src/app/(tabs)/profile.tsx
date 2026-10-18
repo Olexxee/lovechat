@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { Ionicons } from "@expo/vector-icons";
 import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
@@ -62,6 +63,12 @@ export default function ProfileScreen() {
           <Text style={styles.preferenceArrow}>✓</Text>
         </View>
 
+        <PressableScale style={styles.notificationSettings} onPress={() => router.push("/notification-settings")}>
+          <View style={styles.preferenceIcon}><Ionicons name="notifications-outline" size={21} color={colors.primaryDark} /></View>
+          <View style={styles.preferenceCopy}><Text style={styles.preferenceTitle}>Notification settings</Text><Text style={styles.preferenceText}>Manage message alerts and connection updates.</Text></View>
+          <Ionicons name="chevron-forward" size={19} color={colors.textMuted} />
+        </PressableScale>
+
         <PressableScale style={styles.logoutButton} onPress={() => void handleLogout()} disabled={isSigningOut}>
           {isSigningOut ? <ActivityIndicator color={colors.danger} /> : <Text style={styles.logoutText}>Sign out</Text>}
         </PressableScale>
@@ -102,6 +109,7 @@ const styles = StyleSheet.create({
   preferenceTitle: { color: colors.text, fontSize: 14, fontWeight: "800" },
   preferenceText: { color: colors.textSecondary, fontSize: 12, lineHeight: 18 },
   preferenceArrow: { color: colors.success, fontSize: 17, fontWeight: "800" },
+  notificationSettings: { flexDirection: "row", alignItems: "center", gap: spacing.md, padding: spacing.md, borderRadius: radius.lg, backgroundColor: colors.surface, marginTop: spacing.md },
   logoutButton: { minHeight: 52, marginTop: spacing.xl, borderRadius: radius.round, backgroundColor: colors.surface, alignItems: "center", justifyContent: "center" },
   logoutText: { color: colors.danger, fontSize: 14, fontWeight: "800" },
   footer: { marginTop: spacing.xxl, textAlign: "center", color: colors.textMuted, fontSize: 11 },
