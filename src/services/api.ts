@@ -226,6 +226,21 @@ export const loginUser = (payload: LoginPayload): Promise<User> =>
     body: JSON.stringify(payload),
   });
 
+export const requestPasswordReset = (email: string): Promise<{ message: string }> =>
+  request<{ message: string }>("/auth/forgot-password", {
+    method: "POST",
+    body: JSON.stringify({ email: email.trim().toLowerCase() }),
+  });
+
+export const confirmPasswordReset = (
+  token: string,
+  newPassword: string,
+): Promise<{ message: string }> =>
+  request<{ message: string }>("/auth/reset-password", {
+    method: "POST",
+    body: JSON.stringify({ token, new_password: newPassword }),
+  });
+
 export const getCurrentUser = (): Promise<User> => request<User>("/auth/me");
 
 export const logoutUser = async (): Promise<void> => {
@@ -358,3 +373,62 @@ export const uploadChatAttachment = (
     filename,
     mimeType,
   );
+
+
+/* -------------------------------------------------------------------------- */
+/* Notifications                                                              */
+/* -------------------------------------------------------------------------- */
+
+export type AppNotification = {
+  id: number;
+  actor_id: number | null;
+  type: "message" | "relationship" | string;
+  title: string;
+  body: string;
+  data: Record<string, unknown>;
+  is_read: boolean;
+  read_at: string | null;
+  created_at: string;
+};
+
+export type NotificationPreferences = {
+  push_enabled: boolean;
+  message_notifications: boolean;
+  relationship_notifications: boolean;
+};
+
+export type NotificationList = {
+  items: AppNotification[];
+  unread_count: number;
+  has_unread: boolean;
+};
+
+export const getNotifications = (limit = 50): Promise<NotificationList> =>
+  request<NotificationList>(`/notifications?limit=${limit}`);
+
+export const markNotificationRead = (id: number): Promise<AppNotification> =>
+  request<AppNotification>(`/notifications/${id}/read`, { method: "PATCH" });
+
+export const markAllNotificationsRead = (): Promise<{ updated: number }> =>
+  request<{ updated: number }>("/notifications/read-all", { method: "POST" });
+
+export const registerPushDevice = (payload: {
+  expo_push_token: string;
+  platform: "ios" | "android" | "web";
+  device_name?: string;
+}): Promise<{ id: number; registered: boolean }> =>
+  request<{ id: number; registered: boolean }>("/notifications/devices", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+
+export const getNotificationPreferences = (): Promise<NotificationPreferences> =>
+  request<NotificationPreferences>("/notifications/preferences");
+
+export const updateNotificationPreferences = (
+  payload: Partial<NotificationPreferences>,
+): Promise<NotificationPreferences> =>
+  request<NotificationPreferences>("/notifications/preferences", {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });

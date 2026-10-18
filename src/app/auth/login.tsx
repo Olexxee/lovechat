@@ -151,6 +151,14 @@ export default function LoginScreen() {
               />
             </Reveal>
 
+            <View style={styles.forgotRow}>
+              <Link href="/auth/forgot-password" asChild>
+                <Pressable disabled={isLoading}>
+                  <Text style={styles.link}>Forgot password?</Text>
+                </Pressable>
+              </Link>
+            </View>
+
             {error ? (
               <Reveal duration={260}>
                 <Text style={styles.error}>{error}</Text>
@@ -201,5 +209,6 @@ const styles = StyleSheet.create({
   buttonText: { color: colors.white, fontSize: typography.body, fontWeight: "800" },
   footer: { flexDirection: "row", justifyContent: "center", alignItems: "center", marginTop: spacing.xxl, gap: 5 },
   footerText: { fontSize: typography.label, color: colors.textSecondary },
+  forgotRow: { alignItems: "flex-end", marginTop: -spacing.sm, marginBottom: spacing.md },
   link: { fontSize: typography.label, fontWeight: "800", color: colors.primaryDark },
 });
