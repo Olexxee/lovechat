@@ -22,7 +22,7 @@ export function usePushNotifications(enabled: boolean) {
     if (!enabled || !Device.isDevice) return;
 
     let active = true;
-    const responseSubscription = Notifications.addNotificationResponseReceivedListener((response) => {
+    const handleResponse = (response: Notifications.NotificationResponse) => {
       const data = response.notification.request.content.data as Record<string, unknown>;
       const conversationId = Number(data.conversation_id);
       if (Number.isInteger(conversationId) && conversationId > 0) {
@@ -33,7 +33,11 @@ export function usePushNotifications(enabled: boolean) {
       } else {
         router.push("/notifications");
       }
-    });
+    };
+    const responseSubscription = Notifications.addNotificationResponseReceivedListener(handleResponse);
+    void Notifications.getLastNotificationResponseAsync().then((response) => {
+      if (active && response) handleResponse(response);
+    }).catch(() => undefined);
 
     const register = async () => {
       try {
