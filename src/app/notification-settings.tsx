@@ -94,9 +94,9 @@ export default function NotificationSettingsScreen() {
           <View style={styles.card}>
             {row("push_enabled", "Push notifications", "Allow LoveChat to send alerts to this device.")}
             <View style={styles.divider} />
-            {row("message_notifications", "New messages", "Get notified when your connection sends a message.")}
+            {row("message_notifications", "Message push alerts", "Allow push alerts when your connection sends a message.")}
             <View style={styles.divider} />
-            {row("relationship_notifications", "Connection activity", "Requests and connection updates.")}
+            {row("relationship_notifications", "Connection push alerts", "Allow push alerts for requests and connection updates.")}
           </View>
         )}
         <Text style={styles.note}>Your in-app notification inbox remains available even when push notifications are turned off.</Text>
