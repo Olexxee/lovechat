@@ -16,6 +16,7 @@ import {
   acceptRelationship,
   declineRelationship,
   getRelationships,
+  getNotifications,
   type Relationship,
 } from "../../services/api";
 import { colors, radius, spacing } from "../../constants/theme";
@@ -38,6 +39,7 @@ export default function HomeScreen() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [respondingId, setRespondingId] = useState<number | null>(null);
   const [error, setError] = useState("");
+  const [unreadNotifications, setUnreadNotifications] = useState(0);
 
   const loadRelationships = useCallback(async (refresh = false) => {
     if (refresh) setIsRefreshing(true);
@@ -55,6 +57,7 @@ export default function HomeScreen() {
 
   useFocusEffect(useCallback(() => {
     void loadRelationships();
+    void getNotifications(1).then((result) => setUnreadNotifications(result.unread_count)).catch(() => undefined);
   }, [loadRelationships]));
 
   const respond = async (relationshipId: number, accept: boolean) => {
@@ -102,6 +105,15 @@ export default function HomeScreen() {
           <View style={styles.brandMark}><Text style={styles.brandHeart}>♡</Text></View>
           <Text style={styles.brandName}>LoveChat</Text>
           <View style={styles.toplineSpacer} />
+          <PressableScale
+            accessibilityRole="button"
+            accessibilityLabel={unreadNotifications > 0 ? `Notifications, ${unreadNotifications} unread` : "Notifications"}
+            style={styles.notificationButton}
+            onPress={() => router.push("/notifications")}
+          >
+            <Text style={styles.notificationButtonText}>♧</Text>
+            {unreadNotifications > 0 ? <View style={styles.notificationBadge}><Text style={styles.notificationBadgeText}>{unreadNotifications > 9 ? "9+" : unreadNotifications}</Text></View> : null}
+          </PressableScale>
           <PressableScale
             accessibilityRole="button"
             accessibilityLabel="Add a connection"
@@ -271,6 +283,10 @@ const styles = StyleSheet.create({
   brandHeart: { color: colors.white, fontSize: 27, lineHeight: 31 },
   brandName: { marginLeft: spacing.sm, color: colors.text, fontSize: 19, fontWeight: "800", letterSpacing: -0.6 },
   toplineSpacer: { flex: 1 },
+  notificationButton: { width: 44, height: 44, borderRadius: radius.round, backgroundColor: colors.surface, alignItems: "center", justifyContent: "center", marginRight: spacing.sm, position: "relative" },
+  notificationButtonText: { color: colors.primaryDark, fontSize: 25, lineHeight: 29 },
+  notificationBadge: { position: "absolute", top: 1, right: 0, minWidth: 17, height: 17, borderRadius: radius.round, backgroundColor: colors.primary, borderWidth: 1.5, borderColor: colors.background, alignItems: "center", justifyContent: "center", paddingHorizontal: 3 },
+  notificationBadgeText: { color: colors.white, fontSize: 9, fontWeight: "800" },
   addButton: { width: 44, height: 44, borderRadius: radius.round, backgroundColor: colors.surface, alignItems: "center", justifyContent: "center" },
   addButtonText: { color: colors.primaryDark, fontSize: 27, lineHeight: 30, marginTop: -2 },
   greeting: { marginBottom: spacing.xl },
