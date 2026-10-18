@@ -226,6 +226,21 @@ export const loginUser = (payload: LoginPayload): Promise<User> =>
     body: JSON.stringify(payload),
   });
 
+export const requestPasswordReset = (email: string): Promise<{ message: string }> =>
+  request<{ message: string }>("/auth/forgot-password", {
+    method: "POST",
+    body: JSON.stringify({ email: email.trim().toLowerCase() }),
+  });
+
+export const confirmPasswordReset = (
+  token: string,
+  newPassword: string,
+): Promise<{ message: string }> =>
+  request<{ message: string }>("/auth/reset-password", {
+    method: "POST",
+    body: JSON.stringify({ token, new_password: newPassword }),
+  });
+
 export const getCurrentUser = (): Promise<User> => request<User>("/auth/me");
 
 export const logoutUser = async (): Promise<void> => {
