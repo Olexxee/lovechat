@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "LoveChat",
-    "slug": "lovechat",
+    "slug": "mobile",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
@@ -46,6 +46,7 @@
       "eas": {
         "projectId": "2f546d31-7f7d-4518-bef9-955aa25bd26c"
       }
-    }
+    },
+    "owner": "olexxee"
   }
 }
