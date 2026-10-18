@@ -4,6 +4,7 @@ import { Stack, useRouter, useSegments } from "expo-router";
 
 import { AuthProvider, useAuth } from "../context/AuthContext";
 import { colors } from "../constants/theme";
+import { usePushNotifications } from "../features/notifications/usePushNotifications";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -22,6 +23,7 @@ function AppNavigator() {
   const { isAuthenticated, isHydrating } = useAuth();
   const segments = useSegments();
   const router = useRouter();
+  usePushNotifications(isAuthenticated);
 
   useEffect(() => {
     if (isHydrating) return;
@@ -51,6 +53,8 @@ function AppNavigator() {
       }}
     >
       <Stack.Screen name="(tabs)" />
+      <Stack.Screen name="notifications" options={{ animation: "slide_from_right" }} />
+      <Stack.Screen name="notification-settings" options={{ animation: "slide_from_right" }} />
       <Stack.Screen name="auth" />
       <Stack.Screen
         name="relationships/new"
