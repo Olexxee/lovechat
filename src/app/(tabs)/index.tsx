@@ -1,4 +1,5 @@
 import React, { useCallback, useState } from "react";
+import { Ionicons } from "@expo/vector-icons";
 import {
   ActivityIndicator,
   RefreshControl,
@@ -111,7 +112,7 @@ export default function HomeScreen() {
             style={styles.notificationButton}
             onPress={() => router.push("/notifications")}
           >
-            <Text style={styles.notificationButtonText}>♧</Text>
+            <Ionicons name="notifications-outline" size={22} color={colors.primaryDark} />
             {unreadNotifications > 0 ? <View style={styles.notificationBadge}><Text style={styles.notificationBadgeText}>{unreadNotifications > 9 ? "9+" : unreadNotifications}</Text></View> : null}
           </PressableScale>
           <PressableScale
